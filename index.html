@@ -178,6 +178,6 @@
     msgBox.innerHTML = chats.map(c => `<div>🗨️ ${c.time}: ${c.text}</div>`).join("");
   }
 </script>
-
+<script type="module"> // Import the functions you need from the SDKs you need import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js"; import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-analytics.js"; // TODO: Add SDKs for Firebase products that you want to use // https://firebase.google.com/docs/web/setup#available-libraries // Your web app's Firebase configuration // For Firebase JS SDK v7.20.0 and later, measurementId is optional const firebaseConfig = { apiKey: "AIzaSyBy5AQSx8CTvehDfZU7KSAlyGp6cEvswMY", authDomain: "sshapp-65a6b.firebaseapp.com", projectId: "sshapp-65a6b", storageBucket: "sshapp-65a6b.firebasestorage.app", messagingSenderId: "293827149203", appId: "1:293827149203:web:4b31539e7480cc21e17c66", measurementId: "G-48F179S1EK" }; // Initialize Firebase const app = initializeApp(firebaseConfig); const analytics = getAnalytics(app); </script>
 </body>
 </html>
