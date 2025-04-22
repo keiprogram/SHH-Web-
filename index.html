@@ -64,12 +64,11 @@
   </div>
 </div>
 
-<!-- Firebase SDKs（compatバージョン） -->
+<!-- Firebase SDKs -->
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
 
 <script>
-  // ✅ Firebase 設定（あなたのプロジェクトに合わせて正しく設定済み）
   const firebaseConfig = {
     apiKey: "AIzaSyBy5AQSx8CTvehDfZU7KSAlyGp6cEvswMY",
     authDomain: "sshapp-65a6b.firebaseapp.com",
@@ -100,16 +99,28 @@
     }
   });
 
+  function isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+
   function signup() {
-    const email = document.getElementById("email").value;
+    const email = document.getElementById("email").value.trim();
     const pass = document.getElementById("password").value;
+    if (!isValidEmail(email)) {
+      alert("メールアドレスの形式が正しくありません。");
+      return;
+    }
     auth.createUserWithEmailAndPassword(email, pass)
       .catch(e => alert("登録エラー: " + e.message));
   }
 
   function login() {
-    const email = document.getElementById("email").value;
+    const email = document.getElementById("email").value.trim();
     const pass = document.getElementById("password").value;
+    if (!isValidEmail(email)) {
+      alert("メールアドレスの形式が正しくありません。");
+      return;
+    }
     auth.signInWithEmailAndPassword(email, pass)
       .catch(e => alert("ログインエラー: " + e.message));
   }
@@ -118,7 +129,6 @@
     auth.signOut();
   }
 
-  // ===== 暗記アプリのロジック =====
   const words = [
     { question: "apple", answer: "りんご" },
     { question: "blue", answer: "青" },
