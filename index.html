@@ -1,127 +1,168 @@
-
 <!DOCTYPE html>
 <html lang="ja">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>暗記学習アプリ - フル機能</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
-  <style>
-    body {
-      font-family: sans-serif;
-      background: #f0f4f8;
-      padding: 20px;
-    }
-    .container {
-      max-width: 800px;
-      margin: auto;
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-    }
-    input, button, select, textarea {
-      width: 100%;
-      margin: 5px 0;
-      padding: 10px;
-      font-size: 16px;
-    }
-    .hidden { display: none; }
-    .correct { background: #4caf50; color: white; }
-    .wrong { background: #f44336; color: white; }
-    .logout-btn { background: #ccc; margin-top: 10px; }
-    canvas { max-width: 100%; margin-top: 20px; }
-    .option-button {
-      width: 100%;
-      margin: 5px 0;
-      padding: 10px;
-      font-size: 16px;
-      text-align: left;
-    }
-  </style>
-</head>
-<body>
-<div class="container">
-  <h2>暗記学習アプリ - フル機能版</h2>
-
-  <div id="auth-section">
-    <input type="email" id="email" placeholder="メールアドレス" />
-    <input type="password" id="password" placeholder="パスワード" />
-    <button onclick="signup()">新規登録</button>
-    <button onclick="login()">ログイン</button>
-  </div>
-
-  <div id="app-section" class="hidden">
-    <div id="user-email" style="margin-bottom: 10px;"></div>
-    <select id="mode">
-      <option value="en-ja">英→日</option>
-      <option value="ja-en">日→英</option>
-      <option value="ox">〇×</option>
-      <option value="time">タイムアタック</option>
-    </select>
-    <div>
-      <h3 id="word">Loading...</h3>
-      <div id="options"></div>
-      <input type="text" id="answerInput" placeholder="答えを入力"/>
-      <button onclick="checkAnswer()">回答</button>
-      <button onclick="recordResult(true)">正解！</button>
-      <button onclick="recordResult(false)">不正解</button>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>リープ英単語クイズ</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
+  </head>
+  <body class="bg-white min-h-screen text-gray-800">
+    <div id="auth-section" class="p-6">
+      <h1 class="text-xl font-bold mb-4">ログイン / 新規登録</h1>
+      <input id="email" class="border p-2 mb-2 block w-full" type="email" placeholder="メールアドレス">
+      <input id="password" class="border p-2 mb-4 block w-full" type="password" placeholder="パスワード">
+      <div class="space-x-2">
+        <button class="bg-blue-500 text-white px-4 py-2" id="signup-btn">新規登録</button>
+        <button class="bg-green-500 text-white px-4 py-2" id="login-btn">ログイン</button>
+      </div>
     </div>
-    <div>
-      <h3>学習ログ</h3>
-      <ul id="logList"></ul>
+
+    <div id="app-section" class="hidden p-6">
+      <div class="flex justify-between items-center mb-4">
+        <p id="user-email" class="text-lg font-semibold"></p>
+        <button class="bg-red-500 text-white px-4 py-2 logout-btn">ログアウト</button>
+      </div>
+      <button id="start-quiz" class="bg-blue-600 text-white px-4 py-2 mb-4">クイズ開始</button>
+      <div id="quiz-container" class="mb-4 hidden">
+        <p id="question" class="text-xl font-bold mb-4"></p>
+        <div id="choices" class="space-y-2"></div>
+        <p id="feedback" class="mt-4 font-semibold"></p>
+      </div>
     </div>
-    <div>
-      <h3>正答率・進捗</h3>
-      <canvas id="chart"></canvas>
-    </div>
-    <div>
-      <h3>共有リンク</h3>
-      <button onclick="copyShareLink()">共有リンクをコピー</button>
-      <div id="shareLink"></div>
-    </div>
-    <button class="logout-btn" onclick="logout()">ログアウト</button>
-  </div>
-</div>
 
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-<script>
-  const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const auth = firebase.auth();
-  let words = [], currentIndex = 0, correctCount = 0;
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+      import {
+        getAuth,
+        createUserWithEmailAndPassword,
+        signInWithEmailAndPassword,
+        onAuthStateChanged,
+        signOut
+      } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 
-  const authSection = document.getElementById("auth-section");
-  const appSection = document.getElementById("app-section");
-  const userEmailElem = document.getElementById("user-email");
+      const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_AUTH_DOMAIN",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_STORAGE_BUCKET",
+        messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+        appId: "YOUR_APP_ID"
+      };
 
-  auth.onAuthStateChanged(user => {
-    if (user) {
-      authSection.classList.add("hidden");
-      appSection.classList.remove("hidden");
-      userEmailElem.textContent = `こんにちは、${user.email} さん`;
-      loadPDFs();
-    } else {
-      authSection.classList.remove("hidden");
-      appSection.classList.add("hidden");
-    }
-  });
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
 
-  function signup() {
-    const email = document.getElementById("email").value;
-    const pass = document.getElementById("password").value;
-    auth.createUserWithEmailAndPassword(email, pass).catch(e => alert(e.message));
-  }
+      const emailEl = document.getElementById("email");
+      const passwordEl = document.getElementById("password");
+      const signupBtn = document.getElementById("signup-btn");
+      const loginBtn = document.getElementById("login-btn");
+      const logoutBtn = document.querySelector(".logout-btn");
+      const authSection = document.getElementById("auth-section");
+      const appSection = document.getElementById("app-section");
+      const userEmail = document.getElementById("user-email");
 
-  function login() {
-    const email = document.getElementById("email").value;
-    const pass = document.getElementById("password").value;
-    auth 
+      signupBtn.onclick = async () => {
+        try {
+          await createUserWithEmailAndPassword(auth, emailEl.value, passwordEl.value);
+        } catch (e) {
+          alert("登録失敗: " + e.message);
+        }
+      };
+
+      loginBtn.onclick = async () => {
+        try {
+          await signInWithEmailAndPassword(auth, emailEl.value, passwordEl.value);
+        } catch (e) {
+          alert("ログイン失敗: " + e.message);
+        }
+      };
+
+      logoutBtn.onclick = () => signOut(auth);
+
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          authSection.classList.add("hidden");
+          appSection.classList.remove("hidden");
+          userEmail.textContent = `こんにちは、${user.email} さん`;
+        } else {
+          authSection.classList.remove("hidden");
+          appSection.classList.add("hidden");
+        }
+      });
+
+      // --- PDF読み込みとクイズ処理 ---
+      const startQuizBtn = document.getElementById("start-quiz");
+      const quizContainer = document.getElementById("quiz-container");
+      const questionEl = document.getElementById("question");
+      const choicesEl = document.getElementById("choices");
+      const feedbackEl = document.getElementById("feedback");
+
+      let quizData = [];
+
+      async function extractTextFromPDF(url) {
+        const pdf = await pdfjsLib.getDocument(url).promise;
+        let fullText = "";
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          fullText += textContent.items.map((item) => item.str).join(" ") + " ";
+        }
+        return fullText;
+      }
+
+      async function loadPDFs() {
+        const parts = [1, 2, 3, 4];
+        for (const part of parts) {
+          const url = `./pdfs/リープベーシック見出語・用例リスト(Part ${part}).pdf`;
+          const text = await extractTextFromPDF(url);
+          const entries = text.match(/\d+\s+\w+\s+[A-Z]+\s+[^\s]+\s+[^\s]+\s+[^\s]+/g) || [];
+          for (const entry of entries) {
+            const parts = entry.split(/\s+/);
+            if (parts.length >= 6) {
+              const word = parts[1];
+              const meaning = parts[3];
+              quizData.push({ word, meaning });
+            }
+          }
+        }
+      }
+
+      function shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+      }
+
+      function startQuiz() {
+        quizContainer.classList.remove("hidden");
+        const { word, meaning } = quizData[Math.floor(Math.random() * quizData.length)];
+        questionEl.textContent = `${word} の意味は？`;
+        const options = shuffle([
+          meaning,
+          ...shuffle(quizData).slice(0, 3).map((q) => q.meaning)
+        ]);
+        choicesEl.innerHTML = "";
+        options.forEach((opt) => {
+          const btn = document.createElement("button");
+          btn.className = "block bg-gray-200 px-4 py-2 mb-2 w-full text-left hover:bg-gray-300";
+          btn.textContent = opt;
+          btn.onclick = () => {
+            feedbackEl.textContent = opt === meaning ? "正解！" : `不正解… 正解は ${meaning}`;
+          };
+          choicesEl.appendChild(btn);
+        });
+      }
+
+      startQuizBtn.addEventListener("click", () => {
+        if (quizData.length === 0) {
+          loadPDFs().then(startQuiz);
+        } else {
+          startQuiz();
+        }
+      });
+    </script>
+  </body>
+</html>
