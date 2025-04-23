@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>暗記学習アプリ - ログイン付き</title>
+  <title>暗記学習アプリ - フル機能</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
       font-family: sans-serif;
@@ -11,30 +12,29 @@
       padding: 20px;
     }
     .container {
-      max-width: 500px;
+      max-width: 800px;
       margin: auto;
       background: white;
       padding: 20px;
       border-radius: 10px;
     }
-    input, button, textarea {
+    input, button, select, textarea {
       width: 100%;
       margin: 5px 0;
       padding: 10px;
       font-size: 16px;
     }
     .hidden { display: none; }
-    .logout-btn { background: #ccc; margin-top: 10px; }
     .correct { background: #4caf50; color: white; }
     .wrong { background: #f44336; color: white; }
+    .logout-btn { background: #ccc; margin-top: 10px; }
+    canvas { max-width: 100%; margin-top: 20px; }
   </style>
 </head>
 <body>
-
 <div class="container">
-  <h2 id="app-title">暗記学習アプリ</h2>
+  <h2>暗記学習アプリ - フル機能版</h2>
 
-  <!-- 認証フォーム -->
   <div id="auth-section">
     <input type="email" id="email" placeholder="メールアドレス" />
     <input type="password" id="password" placeholder="パスワード" />
@@ -42,32 +42,48 @@
     <button onclick="login()">ログイン</button>
   </div>
 
-  <!-- アプリ本体 -->
   <div id="app-section" class="hidden">
     <div id="user-email" style="margin-bottom: 10px;"></div>
-    <div class="card">
-      <div id="word" style="font-size: 24px; margin: 10px 0;">Loading...</div>
-      <button class="correct" onclick="recordResult(true)">正解！</button>
-      <button class="wrong" onclick="recordResult(false)">不正解</button>
+    <select id="mode">
+      <option value="en-ja">英→日</option>
+      <option value="ja-en">日→英</option>
+      <option value="ox">〇×</option>
+      <option value="time">タイムアタック</option>
+    </select>
+    <div>
+      <label>単語帳CSVファイル（question,answer）:</label>
+      <input type="file" id="csvInput" accept=".csv" onchange="loadCSV(event)" />
+    </div>
+    <div>
+      <textarea id="customWords" placeholder="単語を手動で追加 (形式: question,answer 改行区切り)"></textarea>
+      <button onclick="addCustomWords()">単語追加</button>
+    </div>
+    <div>
+      <h3 id="word">Loading...</h3>
+      <input type="text" id="answerInput" placeholder="答えを入力"/>
+      <button onclick="checkAnswer()">回答</button>
+      <button onclick="recordResult(true)">正解！</button>
+      <button onclick="recordResult(false)">不正解</button>
     </div>
     <div>
       <h3>学習ログ</h3>
       <ul id="logList"></ul>
     </div>
     <div>
-      <h3>チャット</h3>
-      <textarea id="chatInput" placeholder="コメントを書いてください"></textarea>
-      <button onclick="addChat()">送信</button>
-      <div id="chatMessages" style="background:#e0f7fa;padding:10px;border-radius:5px;"></div>
+      <h3>正答率・進捗</h3>
+      <canvas id="chart"></canvas>
+    </div>
+    <div>
+      <h3>共有リンク</h3>
+      <button onclick="copyShareLink()">共有リンクをコピー</button>
+      <div id="shareLink"></div>
     </div>
     <button class="logout-btn" onclick="logout()">ログアウト</button>
   </div>
 </div>
 
-<!-- Firebase SDKs -->
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-
 <script>
   const firebaseConfig = {
     apiKey: "AIzaSyBy5AQSx8CTvehDfZU7KSAlyGp6cEvswMY",
@@ -77,9 +93,9 @@
     messagingSenderId: "293827149203",
     appId: "1:293827149203:web:4b31539e7480cc21e17c66"
   };
-
   firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
+  let words = [], currentIndex = 0, correctCount = 0;
 
   const authSection = document.getElementById("auth-section");
   const appSection = document.getElementById("app-section");
@@ -90,76 +106,116 @@
       authSection.classList.add("hidden");
       appSection.classList.remove("hidden");
       userEmailElem.textContent = `こんにちは、${user.email} さん`;
-      showWord();
-      displayLogs();
-      displayChat();
+      loadDefaultWords();
     } else {
       authSection.classList.remove("hidden");
       appSection.classList.add("hidden");
     }
   });
 
-  function isValidEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  }
-
   function signup() {
-    const email = document.getElementById("email").value.trim();
-    const pass = document.getElementById("password").value;
-    if (!isValidEmail(email)) {
-      alert("メールアドレスの形式が正しくありません。");
-      return;
-    }
-    auth.createUserWithEmailAndPassword(email, pass)
-      .catch(e => alert("登録エラー: " + e.message));
+    const email = email.value;
+    const pass = password.value;
+    auth.createUserWithEmailAndPassword(email, pass).catch(e => alert(e.message));
   }
 
   function login() {
-    const email = document.getElementById("email").value.trim();
+    const email = document.getElementById("email").value;
     const pass = document.getElementById("password").value;
-    if (!isValidEmail(email)) {
-      alert("メールアドレスの形式が正しくありません。");
-      return;
-    }
-    auth.signInWithEmailAndPassword(email, pass)
-      .catch(e => alert("ログインエラー: " + e.message));
+    auth.signInWithEmailAndPassword(email, pass).catch(e => alert(e.message));
   }
 
   function logout() {
     auth.signOut();
   }
 
-  const words = [
-    { question: "apple", answer: "りんご" },
-    { question: "blue", answer: "青" },
-    { question: "sun", answer: "太陽" },
-  ];
-  let currentIndex = 0;
+  function loadDefaultWords() {
+    words = [
+      { question: "apple", answer: "りんご" },
+      { question: "blue", answer: "青" },
+      { question: "sun", answer: "太陽" }
+    ];
+    currentIndex = 0;
+    correctCount = 0;
+    showWord();
+    displayLogs();
+    drawChart();
+  }
+
+  function loadCSV(event) {
+    const file = event.target.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const lines = e.target.result.split('\n');
+      words = lines.map(l => {
+        const [q, a] = l.split(',');
+        return { question: q, answer: a };
+      }).filter(w => w.question && w.answer);
+      currentIndex = 0;
+      correctCount = 0;
+      showWord();
+    };
+    reader.readAsText(file);
+  }
+
+  function addCustomWords() {
+    const text = document.getElementById("customWords").value;
+    const newWords = text.split('\n').map(line => {
+      const [q, a] = line.split(',');
+      return { question: q, answer: a };
+    }).filter(w => w.question && w.answer);
+    words.push(...newWords);
+    currentIndex = 0;
+    showWord();
+  }
 
   function showWord() {
-    const wordElem = document.getElementById("word");
-    if (currentIndex < words.length) {
-      wordElem.textContent = `${words[currentIndex].question}（意味は？）`;
+    if (currentIndex >= words.length) {
+      document.getElementById("word").textContent = "終了！";
+      return;
+    }
+    const mode = document.getElementById("mode").value;
+    let word = words[currentIndex];
+    if (mode === "en-ja") {
+      document.getElementById("word").textContent = `${word.question}（意味は？）`;
+    } else if (mode === "ja-en") {
+      document.getElementById("word").textContent = `${word.answer}（英語は？）`;
+    } else if (mode === "ox") {
+      const fake = words[(currentIndex + 1) % words.length].answer;
+      const isCorrect = Math.random() > 0.5;
+      document.getElementById("word").textContent = `${word.question} → ${isCorrect ? word.answer : fake}`;
     } else {
-      wordElem.textContent = "終了しました！";
+      document.getElementById("word").textContent = `${word.question}`;
     }
   }
 
-  function recordResult(correct) {
-    const word = words[currentIndex]?.question;
+  function checkAnswer() {
+    const mode = document.getElementById("mode").value;
+    const input = document.getElementById("answerInput").value.trim();
+    let correct = false;
+    const word = words[currentIndex];
     if (!word) return;
-    const result = correct ? "○" : "×";
-    const log = `${new Date().toLocaleTimeString()} - ${word}: ${result}`;
-    const user = auth.currentUser;
-    if (!user) return;
 
+    if (mode === "en-ja") correct = input === word.answer;
+    else if (mode === "ja-en") correct = input === word.question;
+    alert(correct ? "正解！" : `不正解。正解は「${mode === "en-ja" ? word.answer : word.question}」`);
+    recordResult(correct);
+  }
+
+  function recordResult(correct) {
+    const user = auth.currentUser;
+    if (!user || currentIndex >= words.length) return;
     const key = `logs_${user.uid}`;
     let logs = JSON.parse(localStorage.getItem(key) || "[]");
-    logs.push(log);
+    const word = words[currentIndex];
+    const result = correct ? "○" : "×";
+    logs.push(`${new Date().toLocaleTimeString()} - ${word.question}: ${result}`);
     localStorage.setItem(key, JSON.stringify(logs));
-    displayLogs();
+    if (correct) correctCount++;
     currentIndex++;
     showWord();
+    displayLogs();
+    drawChart();
   }
 
   function displayLogs() {
@@ -169,24 +225,28 @@
     logList.innerHTML = logs.map(log => `<li>${log}</li>`).join("");
   }
 
-  function addChat() {
-    const input = document.getElementById("chatInput");
-    const msg = input.value.trim();
-    if (!msg) return;
-    const user = auth.currentUser;
-    const key = `chats_${user.uid}`;
-    let chats = JSON.parse(localStorage.getItem(key) || "[]");
-    chats.push({ text: msg, time: new Date().toLocaleTimeString() });
-    localStorage.setItem(key, JSON.stringify(chats));
-    input.value = "";
-    displayChat();
+  function drawChart() {
+    const ctx = document.getElementById("chart").getContext("2d");
+    const percentage = Math.round((correctCount / (currentIndex || 1)) * 100);
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ["正解", "その他"],
+        datasets: [{
+          data: [percentage, 100 - percentage],
+          backgroundColor: ["#4caf50", "#ddd"]
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
   }
 
-  function displayChat() {
-    const msgBox = document.getElementById("chatMessages");
-    const user = auth.currentUser;
-    const chats = JSON.parse(localStorage.getItem(`chats_${user.uid}`) || "[]");
-    msgBox.innerHTML = chats.map(c => `<div>🗨️ ${c.time}: ${c.text}</div>`).join("");
+  function copyShareLink() {
+    const uid = auth.currentUser?.uid;
+    const link = `${location.href}?user=${uid}`;
+    navigator.clipboard.writeText(link);
+    document.getElementById("shareLink").textContent = link;
+    alert("リンクをコピーしました！");
   }
 </script>
 </body>
