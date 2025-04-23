@@ -2,128 +2,265 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PDF単語帳クイズ</title>
-  <script src="https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.3.0/firebase-auth.js"></script>
-  <script src="https://unpkg.com/pdfjs-dist/build/pdf.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>暗記学習アプリ - フル機能</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
+      font-family: sans-serif;
+      background: #f0f4f8;
       padding: 20px;
     }
     .container {
-      max-width: 600px;
+      max-width: 800px;
       margin: auto;
       background: white;
       padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      border-radius: 10px;
     }
-    button {
-      padding: 10px;
-      margin: 5px;
+    input, button, select, textarea {
       width: 100%;
+      margin: 5px 0;
+      padding: 10px;
       font-size: 16px;
     }
-    .choice:hover {
-      background: #ddd;
-    }
+    .hidden { display: none; }
+    .correct { background: #4caf50; color: white; }
+    .wrong { background: #f44336; color: white; }
+    .logout-btn { background: #ccc; margin-top: 10px; }
+    canvas { max-width: 100%; margin-top: 20px; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>PDF英単語四択クイズ</h2>
-    <div id="user-section">
-      <button onclick="signIn()">Googleでログイン</button>
-      <p id="user-name"></p>
-    </div>
-    <div id="quiz-section" style="display:none">
-      <p id="question"></p>
-      <div id="choices"></div>
-      <button onclick="nextQuestion()">次の問題</button>
-    </div>
-    <input type="file" id="pdf-input" accept="application/pdf" />
+<div class="container">
+  <h2>暗記学習アプリ - フル機能版（PDF対応）</h2>
+
+  <div id="auth-section">
+    <input type="email" id="email" placeholder="メールアドレス" />
+    <input type="password" id="password" placeholder="パスワード" />
+    <button onclick="signup()">新規登録</button>
+    <button onclick="login()">ログイン</button>
   </div>
 
-  <script>
-    // Firebase 設定
-    const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-      projectId: "YOUR_PROJECT_ID",
-      appId: "YOUR_APP_ID"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
+  <div id="app-section" class="hidden">
+    <div id="user-email" style="margin-bottom: 10px;"></div>
+    <select id="mode">
+      <option value="en-ja">英→日</option>
+      <option value="ja-en">日→英</option>
+      <option value="ox">〇×</option>
+      <option value="time">タイムアタック</option>
+    </select>
+    <div>
+      <label>単語帳CSVファイル（question,answer）:</label>
+      <input type="file" id="csvInput" accept=".csv" onchange="loadCSV(event)" />
+    </div>
+    <div>
+      <label>リープPDFファイル：</label>
+      <input type="file" id="pdfInput" accept=".pdf" onchange="loadPDF(event)" />
+    </div>
+    <div>
+      <textarea id="customWords" placeholder="単語を手動で追加 (形式: question,answer 改行区切り)"></textarea>
+      <button onclick="addCustomWords()">単語追加</button>
+    </div>
+    <div>
+      <h3 id="word">Loading...</h3>
+      <input type="text" id="answerInput" placeholder="答えを入力"/>
+      <button onclick="checkAnswer()">回答</button>
+      <button onclick="recordResult(true)">正解！</button>
+      <button onclick="recordResult(false)">不正解</button>
+    </div>
+    <div>
+      <h3>学習ログ</h3>
+      <ul id="logList"></ul>
+    </div>
+    <div>
+      <h3>正答率・進捗</h3>
+      <canvas id="chart"></canvas>
+    </div>
+    <div>
+      <h3>共有リンク</h3>
+      <button onclick="copyShareLink()">共有リンクをコピー</button>
+      <div id="shareLink"></div>
+    </div>
+    <button class="logout-btn" onclick="logout()">ログアウト</button>
+  </div>
+</div>
 
-    function signIn() {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      auth.signInWithPopup(provider)
-        .then(result => {
-          document.getElementById('user-name').textContent = `こんにちは、${result.user.displayName}さん`;
-          document.getElementById('quiz-section').style.display = 'block';
-        })
-        .catch(error => alert(error.message));
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBy5AQSx8CTvehDfZU7KSAlyGp6cEvswMY",
+  authDomain: "sshapp-65a6b.firebaseapp.com",
+  projectId: "sshapp-65a6b",
+  storageBucket: "sshapp-65a6b.appspot.com",
+  messagingSenderId: "293827149203",
+  appId: "1:293827149203:web:4b31539e7480cc21e17c66"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+let words = [], currentIndex = 0, correctCount = 0;
+const authSection = document.getElementById("auth-section");
+const appSection = document.getElementById("app-section");
+const userEmailElem = document.getElementById("user-email");
+
+auth.onAuthStateChanged(user => {
+  if (user) {
+    authSection.classList.add("hidden");
+    appSection.classList.remove("hidden");
+    userEmailElem.textContent = `こんにちは、${user.email} さん`;
+    loadDefaultWords();
+  } else {
+    authSection.classList.remove("hidden");
+    appSection.classList.add("hidden");
+  }
+});
+
+function signup() {
+  auth.createUserWithEmailAndPassword(email.value, password.value).catch(e => alert(e.message));
+}
+function login() {
+  auth.signInWithEmailAndPassword(email.value, password.value).catch(e => alert(e.message));
+}
+function logout() { auth.signOut(); }
+
+function loadDefaultWords() {
+  words = [
+    { question: "apple", answer: "りんご" },
+    { question: "blue", answer: "青" },
+    { question: "sun", answer: "太陽" }
+  ];
+  currentIndex = 0; correctCount = 0;
+  showWord(); displayLogs(); drawChart();
+}
+
+function loadCSV(event) {
+  const file = event.target.files[0];
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.split('\n');
+    words = lines.map(l => {
+      const [q, a] = l.split(',');
+      return { question: q, answer: a };
+    }).filter(w => w.question && w.answer);
+    currentIndex = 0; correctCount = 0;
+    showWord();
+  };
+  reader.readAsText(file);
+}
+
+function loadPDF(event) {
+  const file = event.target.files[0];
+  const reader = new FileReader();
+  reader.onload = async function() {
+    const typedarray = new Uint8Array(this.result);
+    const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
+    let text = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(item => item.str).join("\n") + "\n";
     }
-
-    // PDF読み込み
-    let wordData = [];
-    document.getElementById('pdf-input').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-      wordData = [];
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const strings = textContent.items.map(item => item.str);
-        for (let j = 0; j < strings.length; j++) {
-          const word = strings[j];
-          const meaning = strings[j+3]; // 前提：意味は+3後の位置
-          if (word && meaning && /^[a-zA-Z]+$/.test(word)) {
-            wordData.push({word, meaning});
-          }
-        }
-      }
-      nextQuestion();
-    });
-
-    // 四択問題生成
-    function nextQuestion() {
-      if (wordData.length < 4) return alert('十分なデータがありません');
-      const current = wordData[Math.floor(Math.random() * wordData.length)];
-      const choices = [current.meaning];
-      while (choices.length < 4) {
-        const rand = wordData[Math.floor(Math.random() * wordData.length)].meaning;
-        if (!choices.includes(rand)) choices.push(rand);
-      }
-      shuffleArray(choices);
-      document.getElementById('question').textContent = `「${current.word}」の意味は？`;
-      document.getElementById('choices').innerHTML = '';
-      choices.forEach(choice => {
-        const btn = document.createElement('button');
-        btn.textContent = choice;
-        btn.className = 'choice';
-        btn.onclick = () => {
-          if (choice === current.meaning) {
-            alert('正解！');
-          } else {
-            alert(`不正解！正解は「${current.meaning}」`);
-          }
-        };
-        document.getElementById('choices').appendChild(btn);
-      });
-    }
-
-    function shuffleArray(array) {
-      for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
+    const lines = text.split("\n");
+    const tempWords = [];
+    for (let i = 0; i < lines.length - 3; i++) {
+      const eng = lines[i];
+      const meaning = lines[i + 3];
+      if (eng && meaning && /^[a-zA-Z]+$/.test(eng)) {
+        tempWords.push({ question: eng, answer: meaning });
       }
     }
-  </script>
+    words = tempWords;
+    currentIndex = 0; correctCount = 0;
+    showWord();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function addCustomWords() {
+  const text = document.getElementById("customWords").value;
+  const newWords = text.split('\n').map(line => {
+    const [q, a] = line.split(',');
+    return { question: q, answer: a };
+  }).filter(w => w.question && w.answer);
+  words.push(...newWords);
+  currentIndex = 0;
+  showWord();
+}
+
+function showWord() {
+  if (currentIndex >= words.length) {
+    document.getElementById("word").textContent = "終了！";
+    return;
+  }
+  const mode = document.getElementById("mode").value;
+  const word = words[currentIndex];
+  if (mode === "en-ja") document.getElementById("word").textContent = `${word.question}（意味は？）`;
+  else if (mode === "ja-en") document.getElementById("word").textContent = `${word.answer}（英語は？）`;
+  else if (mode === "ox") {
+    const fake = words[(currentIndex + 1) % words.length].answer;
+    const isCorrect = Math.random() > 0.5;
+    document.getElementById("word").textContent = `${word.question} → ${isCorrect ? word.answer : fake}`;
+  } else {
+    document.getElementById("word").textContent = `${word.question}`;
+  }
+}
+
+function checkAnswer() {
+  const mode = document.getElementById("mode").value;
+  const input = document.getElementById("answerInput").value.trim();
+  const word = words[currentIndex];
+  let correct = false;
+  if (!word) return;
+  if (mode === "en-ja") correct = input === word.answer;
+  else if (mode === "ja-en") correct = input === word.question;
+  alert(correct ? "正解！" : `不正解。正解は「${mode === "en-ja" ? word.answer : word.question}」`);
+  recordResult(correct);
+}
+
+function recordResult(correct) {
+  const user = auth.currentUser;
+  if (!user || currentIndex >= words.length) return;
+  const key = `logs_${user.uid}`;
+  let logs = JSON.parse(localStorage.getItem(key) || "[]");
+  const word = words[currentIndex];
+  logs.push(`${new Date().toLocaleTimeString()} - ${word.question}: ${correct ? "○" : "×"}`);
+  localStorage.setItem(key, JSON.stringify(logs));
+  if (correct) correctCount++;
+  currentIndex++;
+  showWord();
+  displayLogs();
+  drawChart();
+}
+
+function displayLogs() {
+  const logList = document.getElementById("logList");
+  const user = auth.currentUser;
+  const logs = JSON.parse(localStorage.getItem(`logs_${user.uid}`) || "[]");
+  logList.innerHTML = logs.map(log => `<li>${log}</li>`).join("");
+}
+
+function drawChart() {
+  const ctx = document.getElementById("chart").getContext("2d");
+  const percentage = Math.round((correctCount / (currentIndex || 1)) * 100);
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ["正解", "その他"],
+      datasets: [{ data: [percentage, 100 - percentage], backgroundColor: ["#4caf50", "#ddd"] }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+  });
+}
+
+function copyShareLink() {
+  const uid = auth.currentUser?.uid;
+  const link = `${location.href}?user=${uid}`;
+  navigator.clipboard.writeText(link);
+  document.getElementById("shareLink").textContent = link;
+  alert("リンクをコピーしました！");
+}
+</script>
 </body>
 </html>
