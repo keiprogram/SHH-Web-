@@ -1,3 +1,34 @@
+以下は、ユーザー認証機能を保持しつつ、リポジトリ内の `pdfs` フォルダに格納された「リープベーシック見出語・用例リスト(Part 1〜4).pdf」から問題を自動生成し、四択形式で出題する暗記学習アプリの完全なコードです。
+
+---
+
+## ✅ 主な変更点
+
+1. **PDF.jsを使用してPDFファイルからテキストを抽出**  
+   `pdfs` フォルダ内のPDFファイルを読み込み、テキストを抽出します。
+
+2. **抽出したテキストから問題を生成**  
+   抽出したテキストを解析し、問題文、正解、誤答選択肢を生成します。
+
+3. **四択形式での出題**  
+   生成した問題を四択形式で出題し、ユーザーが選択できるようにします。
+
+---
+
+## 🧩 注意点
+
+-PDFファイルは、Webサーバー上の `pdfs` フォルダに配置されている必要があります
+
+-PDFファイルの内容は、適切にフォーマットされている必要があります
+
+-PDF.jsライブラリを使用するため、インターネット接続が必要です
+
+---
+
+## 💻 完全なコード
+以下のコードをHTMLファイルとして保存し、Webサーバー上で実行してくださ。
+
+```html
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -5,7 +36,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>暗記学習アプリ - フル機能</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
   <style>
     body {
       font-family: sans-serif;
@@ -30,11 +61,18 @@
     .wrong { background: #f44336; color: white; }
     .logout-btn { background: #ccc; margin-top: 10px; }
     canvas { max-width: 100%; margin-top: 20px; }
+    .option-button {
+      width: 100%;
+      margin: 5px 0;
+      padding: 10px;
+      font-size: 16px;
+      text-align: left;
+    }
   </style>
 </head>
 <body>
 <div class="container">
-  <h2>暗記学習アプリ - フル機能版（PDF対応）</h2>
+  <h2>暗記学習アプリ - フル機能版</h2>
 
   <div id="auth-section">
     <input type="email" id="email" placeholder="メールアドレス" />
@@ -52,19 +90,8 @@
       <option value="time">タイムアタック</option>
     </select>
     <div>
-      <label>単語帳CSVファイル（question,answer）:</label>
-      <input type="file" id="csvInput" accept=".csv" onchange="loadCSV(event)" />
-    </div>
-    <div>
-      <label>リープPDFファイル：</label>
-      <input type="file" id="pdfInput" accept=".pdf" onchange="loadPDF(event)" />
-    </div>
-    <div>
-      <textarea id="customWords" placeholder="単語を手動で追加 (形式: question,answer 改行区切り)"></textarea>
-      <button onclick="addCustomWords()">単語追加</button>
-    </div>
-    <div>
       <h3 id="word">Loading...</h3>
+      <div id="options"></div>
       <input type="text" id="answerInput" placeholder="答えを入力"/>
       <button onclick="checkAnswer()">回答</button>
       <button onclick="recordResult(true)">正解！</button>
@@ -90,177 +117,41 @@
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyBy5AQSx8CTvehDfZU7KSAlyGp6cEvswMY",
-  authDomain: "sshapp-65a6b.firebaseapp.com",
-  projectId: "sshapp-65a6b",
-  storageBucket: "sshapp-65a6b.appspot.com",
-  messagingSenderId: "293827149203",
-  appId: "1:293827149203:web:4b31539e7480cc21e17c66"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-let words = [], currentIndex = 0, correctCount = 0;
-const authSection = document.getElementById("auth-section");
-const appSection = document.getElementById("app-section");
-const userEmailElem = document.getElementById("user-email");
-
-auth.onAuthStateChanged(user => {
-  if (user) {
-    authSection.classList.add("hidden");
-    appSection.classList.remove("hidden");
-    userEmailElem.textContent = `こんにちは、${user.email} さん`;
-    loadDefaultWords();
-  } else {
-    authSection.classList.remove("hidden");
-    appSection.classList.add("hidden");
-  }
-});
-
-function signup() {
-  auth.createUserWithEmailAndPassword(email.value, password.value).catch(e => alert(e.message));
-}
-function login() {
-  auth.signInWithEmailAndPassword(email.value, password.value).catch(e => alert(e.message));
-}
-function logout() { auth.signOut(); }
-
-function loadDefaultWords() {
-  words = [
-    { question: "apple", answer: "りんご" },
-    { question: "blue", answer: "青" },
-    { question: "sun", answer: "太陽" }
-  ];
-  currentIndex = 0; correctCount = 0;
-  showWord(); displayLogs(); drawChart();
-}
-
-function loadCSV(event) {
-  const file = event.target.files[0];
-  const reader = new FileReader();
-  reader.onload = e => {
-    const lines = e.target.result.split('\n');
-    words = lines.map(l => {
-      const [q, a] = l.split(',');
-      return { question: q, answer: a };
-    }).filter(w => w.question && w.answer);
-    currentIndex = 0; correctCount = 0;
-    showWord();
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_AUTH_DOMAIN",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID"
   };
-  reader.readAsText(file);
-}
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  let words = [], currentIndex = 0, correctCount = 0;
 
-function loadPDF(event) {
-  const file = event.target.files[0];
-  const reader = new FileReader();
-  reader.onload = async function() {
-    const typedarray = new Uint8Array(this.result);
-    const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
-    let text = "";
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      text += content.items.map(item => item.str).join("\n") + "\n";
+  const authSection = document.getElementById("auth-section");
+  const appSection = document.getElementById("app-section");
+  const userEmailElem = document.getElementById("user-email");
+
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      authSection.classList.add("hidden");
+      appSection.classList.remove("hidden");
+      userEmailElem.textContent = `こんにちは、${user.email} さん`;
+      loadPDFs();
+    } else {
+      authSection.classList.remove("hidden");
+      appSection.classList.add("hidden");
     }
-    const lines = text.split("\n");
-    const tempWords = [];
-    for (let i = 0; i < lines.length - 3; i++) {
-      const eng = lines[i];
-      const meaning = lines[i + 3];
-      if (eng && meaning && /^[a-zA-Z]+$/.test(eng)) {
-        tempWords.push({ question: eng, answer: meaning });
-      }
-    }
-    words = tempWords;
-    currentIndex = 0; correctCount = 0;
-    showWord();
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-function addCustomWords() {
-  const text = document.getElementById("customWords").value;
-  const newWords = text.split('\n').map(line => {
-    const [q, a] = line.split(',');
-    return { question: q, answer: a };
-  }).filter(w => w.question && w.answer);
-  words.push(...newWords);
-  currentIndex = 0;
-  showWord();
-}
-
-function showWord() {
-  if (currentIndex >= words.length) {
-    document.getElementById("word").textContent = "終了！";
-    return;
-  }
-  const mode = document.getElementById("mode").value;
-  const word = words[currentIndex];
-  if (mode === "en-ja") document.getElementById("word").textContent = `${word.question}（意味は？）`;
-  else if (mode === "ja-en") document.getElementById("word").textContent = `${word.answer}（英語は？）`;
-  else if (mode === "ox") {
-    const fake = words[(currentIndex + 1) % words.length].answer;
-    const isCorrect = Math.random() > 0.5;
-    document.getElementById("word").textContent = `${word.question} → ${isCorrect ? word.answer : fake}`;
-  } else {
-    document.getElementById("word").textContent = `${word.question}`;
-  }
-}
-
-function checkAnswer() {
-  const mode = document.getElementById("mode").value;
-  const input = document.getElementById("answerInput").value.trim();
-  const word = words[currentIndex];
-  let correct = false;
-  if (!word) return;
-  if (mode === "en-ja") correct = input === word.answer;
-  else if (mode === "ja-en") correct = input === word.question;
-  alert(correct ? "正解！" : `不正解。正解は「${mode === "en-ja" ? word.answer : word.question}」`);
-  recordResult(correct);
-}
-
-function recordResult(correct) {
-  const user = auth.currentUser;
-  if (!user || currentIndex >= words.length) return;
-  const key = `logs_${user.uid}`;
-  let logs = JSON.parse(localStorage.getItem(key) || "[]");
-  const word = words[currentIndex];
-  logs.push(`${new Date().toLocaleTimeString()} - ${word.question}: ${correct ? "○" : "×"}`);
-  localStorage.setItem(key, JSON.stringify(logs));
-  if (correct) correctCount++;
-  currentIndex++;
-  showWord();
-  displayLogs();
-  drawChart();
-}
-
-function displayLogs() {
-  const logList = document.getElementById("logList");
-  const user = auth.currentUser;
-  const logs = JSON.parse(localStorage.getItem(`logs_${user.uid}`) || "[]");
-  logList.innerHTML = logs.map(log => `<li>${log}</li>`).join("");
-}
-
-function drawChart() {
-  const ctx = document.getElementById("chart").getContext("2d");
-  const percentage = Math.round((correctCount / (currentIndex || 1)) * 100);
-  new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: ["正解", "その他"],
-      datasets: [{ data: [percentage, 100 - percentage], backgroundColor: ["#4caf50", "#ddd"] }]
-    },
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
   });
-}
 
-function copyShareLink() {
-  const uid = auth.currentUser?.uid;
-  const link = `${location.href}?user=${uid}`;
-  navigator.clipboard.writeText(link);
-  document.getElementById("shareLink").textContent = link;
-  alert("リンクをコピーしました！");
-}
-</script>
-</body>
-</html>
+  function signup() {
+    const email = document.getElementById("email").value;
+    const pass = document.getElementById("password").value;
+    auth.createUserWithEmailAndPassword(email, pass).catch(e => alert(e.message));
+  }
+
+  function login() {
+    const email = document.getElementById("email").value;
+    const pass = document.getElementById("password").value;
+    auth 
